@@ -10,7 +10,7 @@ The two features are independent and can be used separately.
 ## Requirements
 
 * Firefox
-* [MrOtherGuy/fx-autoconfig](https://github.com/MrOtherGuy/fx-autoconfig)
+* [MrOtherGuy/fx-autoconfig](https://github.com/MrOtherGuy/fx-autoconfig) (Please READ the security warnings detailed here)
 * [Vimium C](https://github.com/gdh1995/vimium-c) for the Vimium integration
 
 ## Install fx-autoconfig

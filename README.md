@@ -90,7 +90,7 @@ If fx-autoconfig created a default `JS` directory and you do not need its sample
 ```bash
 rm -rf /path/to/firefox/profile/chrome/JS
 
-git clone https://github.com/USER/REPOSITORY.git \
+git clone https://github.com/UnsaltedScholar/firefox-pdfjs-autoconfig.git \
     /path/to/firefox/profile/chrome/JS
 ```
 

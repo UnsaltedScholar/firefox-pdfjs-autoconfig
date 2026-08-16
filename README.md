@@ -7,6 +7,10 @@ Firefox customizations for the built-in PDF viewer:
 
 The two features are independent and can be used separately.
 
+## AI Usage Disclaimer
+
+AI was used to generate much of the code and documentation. I have personally reviewed and tested all code, but I cannot guarantee that it is free of bugs or security issues. Use at your own risk.
+
 ## Requirements
 
 * Firefox
@@ -133,6 +137,14 @@ background: "rgba(100, 160, 255, 0.55)",
 The first three values are the red, green, and blue components from `0` to `255`; the final value is opacity from `0` to `1`.
 
 After changing the script, restart Firefox and clear the startup cache.
+
+## Toggling dark mode
+
+This can be accomplished by adding this bookmarklet to your bookmarks bar:
+
+```javascript
+javascript:(()=>{const v=document.getElementById("viewer")||document.querySelector(".pdfViewer");if(!v){alert("PDF.js viewer element not found");return}const on=v.dataset.pdfi==="1";if(on){v.dataset.pdfi="0";v.style.filter="";v._pdfiCleanup?.();delete v._pdfiCleanup;return}v.dataset.pdfi="1";v.style.filter="invert(100%) hue-rotate(180deg)";const o=document.createElement("div");o.id="pdfi-selection-overlay";Object.assign(o.style,{position:"fixed",inset:"0",pointerEvents:"none",zIndex:"2147483647",overflow:"hidden"});document.body.appendChild(o);let raf=0;const paint=()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{o.replaceChildren();const s=getSelection();if(!s||s.isCollapsed||!s.rangeCount)return;const n=s.anchorNode;if(!n||!v.contains(n.nodeType===1?n:n.parentElement))return;for(let i=0;i<s.rangeCount;i++)for(const r of s.getRangeAt(i).getClientRects()){if(r.width<1||r.height<1)continue;const d=document.createElement("div");Object.assign(d.style,{position:"fixed",left:r.left+"px",top:r.top+"px",width:r.width+"px",height:r.height+"px",background:"rgba(255,110,110,.62)",borderRadius:"2px"});o.appendChild(d)}})};document.addEventListener("selectionchange",paint);window.addEventListener("scroll",paint,true);window.addEventListener("resize",paint);paint();v._pdfiCleanup=()=>{cancelAnimationFrame(raf);document.removeEventListener("selectionchange",paint);window.removeEventListener("scroll",paint,true);window.removeEventListener("resize",paint);o.remove()}})()
+```
 
 ## Updating
 

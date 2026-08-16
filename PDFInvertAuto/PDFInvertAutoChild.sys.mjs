@@ -47,7 +47,7 @@ export class PDFInvertAutoChild extends JSWindowActorChild {
         document.documentElement.dataset.pdfAutoInvert = "1";
 
         /*
-         * Same transformation as your working bookmarklet.
+         * Same transformation as provided bookmarklet.
          */
         viewer.style.filter = "invert(100%) hue-rotate(180deg)";
 

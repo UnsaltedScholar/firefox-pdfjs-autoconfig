@@ -124,7 +124,11 @@ Before applying dark mode, the script renders a small off-screen sample of **pag
 
 The sample is at most 128 by 128 pixels. A document is treated as already dark when at least 70% of the outer border band and 60% of the whole sample have relative luminance below 0.18. Checking both regions helps distinguish dark slides from white pages containing large dark figures. Already-dark documents retain their original colors; other documents receive the inversion filter.
 
-This is a heuristic: full-page photographs, unusual borders, and documents mixing light and dark pages can be misclassified. The decision applies to the whole document, once per load. Use the bookmarklet below to override it. Detection leaves the document unchanged if rendering fails or takes longer than 15 seconds; it also preserves a manual filter change made while sampling is in progress. A light PDF may appear briefly in its original colors before detection finishes.
+This is a heuristic: full-page photographs, unusual borders, and documents mixing light and dark pages can be misclassified. The decision applies to the whole document, once per load. Use the bookmarklet below to override it.
+
+Detection leaves the document unchanged if rendering fails or takes longer than 15 seconds; it also preserves a manual filter change made while sampling is in progress.
+
+While detection is pending, the PDF pages are hidden, exposing PDF.js's own background color; the toolbar and dialogs remain available. Pages are revealed only after the final filter is applied. The cover is also removed on failure or timeout, and does not apply to printing.
 
 To sample a different page, change `SAMPLE_PAGE` at the top of `PDFInvertAuto/PDFInvertAutoChild.sys.mjs` to a positive page number (for example, `1`); documents with fewer pages use their last page. Restart Firefox and clear the startup cache after editing the script.
 

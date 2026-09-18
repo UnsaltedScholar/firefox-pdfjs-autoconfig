@@ -42,50 +42,76 @@ function hasDarkBackground({ data, width, height }) {
 
 export class PDFInvertAutoChild extends JSWindowActorChild {
     stopped = false;
+    started = false;
     poll = null;
     timeout = null;
     renderTask = null;
+    pendingStyle = null;
+    viewer = null;
+    originalFilter = "";
 
     handleEvent(event) {
-        if (event.type === "DOMContentLoaded") {
+        if (event.type === "DOMDocElementInserted") {
+            this.prepare();
+        } else if (event.type === "DOMContentLoaded") {
             this.initialize();
         }
     }
 
-    initialize() {
+    prepare() {
         const document = this.document;
-        if (!document ||
+        if (this.stopped || !document?.documentElement ||
             Cu.getObjectPrincipal(document).originNoSuffix !== "resource://pdf.js") {
-            return;
+            return false;
         }
-        const viewer = document.querySelector(".pdfViewer");
-        if (!viewer || document.documentElement.dataset.pdfAutoInvert) {
-            return;
+        if (this.pendingStyle) {
+            return true;
+        }
+        if (document.documentElement.dataset.pdfAutoInvert) {
+            return false;
         }
         document.documentElement.dataset.pdfAutoInvert = "pending";
-        const originalFilter = viewer.style.filter;
+
+        // Install before PDF.js creates any page canvases. Opacity preserves
+        // their geometry and rendering, while exposing the viewer's actual
+        // background instead of guessing a cover color. Keep the toolbar and
+        // dialogs visible. Scope to screen so printing is never concealed.
+        this.pendingStyle = document.createElement("style");
+        this.pendingStyle.textContent = `
+            @media screen {
+                :root[data-pdf-auto-invert="pending"] .pdfViewer {
+                    opacity: 0 !important;
+                    pointer-events: none !important;
+                }
+            }
+        `;
+        document.documentElement.appendChild(this.pendingStyle);
+        // Also release the concealment if viewer initialization never finishes.
+        this.timeout = setTimeout(() => this.finish("unavailable"),
+            DETECTION_TIMEOUT_MS);
+        return true;
+    }
+
+    initialize() {
+        if (this.started || !this.prepare()) {
+            return;
+        }
+        this.started = true;
+        const document = this.document;
+        this.viewer = document.querySelector(".pdfViewer");
+        if (!this.viewer) {
+            this.finish("unavailable");
+            return;
+        }
+        this.originalFilter = this.viewer.style.filter;
         const window = this.contentWindow;
 
-        const finish = decision => {
+        // Check immediately, then briefly poll until PDF.js exposes the loaded
+        // document. This avoids the old mandatory first 100 ms wait.
+        const checkDocument = () => {
             if (this.stopped) {
                 return;
             }
-            this.stop();
-            // Preserve a manual toggle made while detection was in progress.
-            if (viewer.dataset.pdfAutoInvertManual === "1" ||
-                viewer.style.filter !== originalFilter) {
-                decision = "manual";
-            } else if (decision === "inverted") {
-                viewer.style.filter = INVERT_FILTER;
-            }
-            document.documentElement.dataset.pdfAutoInvert = decision;
-        };
-
-        // PDF.js initializes asynchronously. Poll only until its document is
-        // ready; no need to wait for page 2 to become visible or for all pages.
-        this.timeout = setTimeout(() => finish("unavailable"),
-            DETECTION_TIMEOUT_MS);
-        this.poll = setInterval(() => {
             const pdf = window.wrappedJSObject.PDFViewerApplication?.pdfDocument;
             if (!pdf) {
                 return;
@@ -93,21 +119,42 @@ export class PDFInvertAutoChild extends JSWindowActorChild {
             clearInterval(this.poll);
             this.poll = null;
             this.sample(pdf, document).then(
-                dark => finish(dark ? "dark" : "inverted"),
+                dark => this.finish(dark ? "dark" : "inverted"),
                 error => {
                     if (!this.stopped) {
                         console.warn("PDF auto-invert: background detection failed; " +
                             "leaving the document unchanged.", error);
-                        finish("unavailable");
+                        this.finish("unavailable");
                     }
                 }
             );
-        }, 100);
+        };
+        this.poll = setInterval(checkDocument, 25);
+        checkDocument();
+    }
+
+    finish(decision) {
+        if (this.stopped) {
+            return;
+        }
+        try {
+            // Apply the final filter before revealing the pages, in one task.
+            // Preserve manual toggles made while detection was in progress.
+            if (this.viewer?.dataset.pdfAutoInvertManual === "1" ||
+                (this.viewer && this.viewer.style.filter !== this.originalFilter)) {
+                decision = "manual";
+            } else if (decision === "inverted" && this.viewer) {
+                this.viewer.style.filter = INVERT_FILTER;
+            }
+            this.document.documentElement.dataset.pdfAutoInvert = decision;
+        } finally {
+            this.stop();
+        }
     }
 
     async sample(pdf, document) {
         // Promise results acquire Xrays again. Only waive them for the trusted
-        // built-in PDF.js viewer, whose principal is checked in initialize().
+        // built-in PDF.js viewer, whose principal is checked in prepare().
         const page = Cu.waiveXrays(await pdf.getPage(
             Math.min(SAMPLE_PAGE, pdf.numPages)
         ));
@@ -145,6 +192,9 @@ export class PDFInvertAutoChild extends JSWindowActorChild {
 
     stop() {
         this.stopped = true;
+        this.pendingStyle?.remove();
+        this.pendingStyle = null;
+        this.viewer = null;
         clearInterval(this.poll);
         clearTimeout(this.timeout);
         this.poll = this.timeout = null;

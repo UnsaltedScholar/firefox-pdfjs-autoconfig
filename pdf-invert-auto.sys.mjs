@@ -6,6 +6,7 @@ ActorManagerParent.addJSWindowActors({
             esModuleURI:
                 "chrome://userscripts/content/PDFInvertAuto/PDFInvertAutoChild.sys.mjs",
             events: {
+                DOMDocElementInserted: { capture: true },
                 DOMContentLoaded: {},
             },
         },
@@ -13,7 +14,7 @@ ActorManagerParent.addJSWindowActors({
         /*
          * Deliberately don't use `matches` here.
          *
-         * The child performs a strict PDF.js DOM check instead. This avoids
+         * The child checks the PDF.js principal and viewer DOM. This avoids
          * both the fx-autoconfig @WindowActor remote-type restriction and any
          * ambiguity over the externally visible PDF URL versus the internal
          * PDF.js document URI.

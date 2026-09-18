@@ -1,51 +1,159 @@
-export class PDFInvertAutoChild extends JSWindowActorChild {
-    handleEvent(event) {
-        if (event.type !== "DOMContentLoaded") {
-            return;
-        }
+import { setInterval, clearInterval, setTimeout, clearTimeout } from "resource://gre/modules/Timer.sys.mjs";
 
-        this.initialize();
+// Sample page 2 to avoid title pages; single-page documents use page 1.
+const SAMPLE_PAGE = 2;
+const SAMPLE_SIZE = 128;
+const DETECTION_TIMEOUT_MS = 15000;
+const INVERT_FILTER = "invert(100%) hue-rotate(180deg)";
+
+// Estimate background from both the outer eighth and the whole rendered page.
+// Requiring dark edges avoids mistaking a large dark figure on white paper for
+// a dark document. This is a heuristic, not a PDF background-color property.
+function hasDarkBackground({ data, width, height }) {
+    const linear = value => {
+        const s = value / 255;
+        return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    };
+    const ramp = Array.from({ length: 256 }, (_, i) => linear(i));
+    let dark = 0;
+    let edgeDark = 0;
+    let edges = 0;
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const i = (y * width + x) * 4;
+            const alpha = data[i + 3] / 255;
+            // Composite any residual transparency over white paper.
+            const channel = offset => ramp[Math.round(
+                data[i + offset] * alpha + 255 * (1 - alpha)
+            )];
+            const luminance = 0.2126 * channel(0) +
+                0.7152 * channel(1) + 0.0722 * channel(2);
+            const isDark = luminance < 0.18;
+            dark += isDark;
+            if (x < width / 8 || x >= width * 7 / 8 ||
+                y < height / 8 || y >= height * 7 / 8) {
+                edges++;
+                edgeDark += isDark;
+            }
+        }
+    }
+    return edgeDark / edges >= 0.7 && dark / (width * height) >= 0.6;
+}
+
+export class PDFInvertAutoChild extends JSWindowActorChild {
+    stopped = false;
+    poll = null;
+    timeout = null;
+    renderTask = null;
+
+    handleEvent(event) {
+        if (event.type === "DOMContentLoaded") {
+            this.initialize();
+        }
     }
 
     initialize() {
         const document = this.document;
-
-        if (!document) {
+        if (!document ||
+            Cu.getObjectPrincipal(document).originNoSuffix !== "resource://pdf.js") {
             return;
         }
-
-        /*
-         * Rather than trusting the externally visible URL, identify PDF.js
-         * from its actual viewer DOM.
-         */
-        const viewer =
-            document.querySelector(".pdfViewer") ||
-            document.getElementById("viewer");
-
-        if (!viewer) {
+        const viewer = document.querySelector(".pdfViewer");
+        if (!viewer || document.documentElement.dataset.pdfAutoInvert) {
             return;
         }
+        document.documentElement.dataset.pdfAutoInvert = "pending";
+        const originalFilter = viewer.style.filter;
+        const window = this.contentWindow;
 
-        /*
-         * Avoid accidentally acting on an unrelated webpage that happens to
-         * contain #viewer.
-         */
-        if (
-            !viewer.classList.contains("pdfViewer") &&
-            !document.querySelector(".pdfViewer")
-        ) {
-            return;
+        const finish = decision => {
+            if (this.stopped) {
+                return;
+            }
+            this.stop();
+            // Preserve a manual toggle made while detection was in progress.
+            if (viewer.dataset.pdfAutoInvertManual === "1" ||
+                viewer.style.filter !== originalFilter) {
+                decision = "manual";
+            } else if (decision === "inverted") {
+                viewer.style.filter = INVERT_FILTER;
+            }
+            document.documentElement.dataset.pdfAutoInvert = decision;
+        };
+
+        // PDF.js initializes asynchronously. Poll only until its document is
+        // ready; no need to wait for page 2 to become visible or for all pages.
+        this.timeout = setTimeout(() => finish("unavailable"),
+            DETECTION_TIMEOUT_MS);
+        this.poll = setInterval(() => {
+            const pdf = window.wrappedJSObject.PDFViewerApplication?.pdfDocument;
+            if (!pdf) {
+                return;
+            }
+            clearInterval(this.poll);
+            this.poll = null;
+            this.sample(pdf, document).then(
+                dark => finish(dark ? "dark" : "inverted"),
+                error => {
+                    if (!this.stopped) {
+                        console.warn("PDF auto-invert: background detection failed; " +
+                            "leaving the document unchanged.", error);
+                        finish("unavailable");
+                    }
+                }
+            );
+        }, 100);
+    }
+
+    async sample(pdf, document) {
+        // Promise results acquire Xrays again. Only waive them for the trusted
+        // built-in PDF.js viewer, whose principal is checked in initialize().
+        const page = Cu.waiveXrays(await pdf.getPage(
+            Math.min(SAMPLE_PAGE, pdf.numPages)
+        ));
+        if (this.stopped) {
+            return false;
         }
-
-        if (document.documentElement.dataset.pdfAutoInvert === "1") {
-            return;
+        const content = document.defaultView.wrappedJSObject;
+        const options = new content.Object();
+        options.scale = 1;
+        const size = page.getViewport(options);
+        options.scale = SAMPLE_SIZE / Math.max(size.width, size.height);
+        const viewport = page.getViewport(options);
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.min(SAMPLE_SIZE, Math.ceil(viewport.width)));
+        canvas.height = Math.max(1, Math.min(SAMPLE_SIZE, Math.ceil(viewport.height)));
+        const context = canvas.getContext("2d", { willReadFrequently: true });
+        try {
+            // Off-screen render: no viewer CSS filters, screenshots, extra PDF
+            // downloads, or changes to the current page/zoom are involved.
+            const renderOptions = new content.Object();
+            renderOptions.canvasContext = context;
+            renderOptions.viewport = viewport;
+            renderOptions.background = "rgb(255, 255, 255)";
+            this.renderTask = page.render(renderOptions);
+            await this.renderTask.promise;
+            return hasDarkBackground(context.getImageData(
+                0, 0, canvas.width, canvas.height
+            ));
+        } finally {
+            this.renderTask = null;
+            canvas.width = canvas.height = 0;
+            // Do not call page.cleanup(): this page is shared with the viewer.
         }
+    }
 
-        document.documentElement.dataset.pdfAutoInvert = "1";
+    stop() {
+        this.stopped = true;
+        clearInterval(this.poll);
+        clearTimeout(this.timeout);
+        this.poll = this.timeout = null;
+        if (this.renderTask && !Cu.isDeadWrapper(this.renderTask)) {
+            this.renderTask.cancel();
+        }
+    }
 
-        /*
-         * Invert PDF content while leaving selection highlighting to PDF.js.
-         */
-        viewer.style.filter = "invert(100%) hue-rotate(180deg)";
+    didDestroy() {
+        this.stop();
     }
 }

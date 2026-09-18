@@ -2,7 +2,7 @@
 
 Firefox customizations for the built-in PDF viewer:
 
-* **Automatic dark mode** for PDF content, with native PDF.js text-selection highlighting.
+* **Automatic dark mode** for light-background PDFs, with native PDF.js text-selection highlighting.
 * **Vimium C support** inside the built-in PDF viewer, using Vimium C's real mappings, hints, modes, and settings.
 
 The two features are independent and can be used separately.
@@ -118,6 +118,18 @@ Tools → userScripts → Restart and clear startup cache
 
 Open a new PDF to test the scripts.
 
+## Automatic background detection
+
+Before applying dark mode, the script renders a small off-screen sample of **page 2**, or page 1 for a single-page PDF. It uses the already loaded PDF.js document, without navigating to that page or fetching a second copy of the PDF. Sampling the second page avoids basing the decision on a differently styled title page.
+
+The sample is at most 128 by 128 pixels. A document is treated as already dark when at least 70% of the outer border band and 60% of the whole sample have relative luminance below 0.18. Checking both regions helps distinguish dark slides from white pages containing large dark figures. Already-dark documents retain their original colors; other documents receive the inversion filter.
+
+This is a heuristic: full-page photographs, unusual borders, and documents mixing light and dark pages can be misclassified. The decision applies to the whole document, once per load. Use the bookmarklet below to override it. Detection leaves the document unchanged if rendering fails or takes longer than 15 seconds; it also preserves a manual filter change made while sampling is in progress. A light PDF may appear briefly in its original colors before detection finishes.
+
+To sample a different page, change `SAMPLE_PAGE` at the top of `PDFInvertAuto/PDFInvertAutoChild.sys.mjs` to a positive page number (for example, `1`); documents with fewer pages use their last page. Restart Firefox and clear the startup cache after editing the script.
+
+The rendering uses PDF.js's [page viewport and canvas render APIs](https://mozilla.github.io/pdf.js/examples/). The sample canvas is discarded after the decision; PDF decoding and rendering costs still depend on the document's complexity.
+
 ## Text selection
 
 Text selection uses Firefox/PDF.js's native highlighting. The dark-mode script only applies the inversion filter to PDF content; it does not draw a custom selection overlay or attach selection, scroll, or resize listeners.
@@ -129,7 +141,7 @@ If upgrading from the version with the custom overlay, restart Firefox and clear
 Add this bookmarklet to your bookmarks bar to toggle the inversion filter, including dark mode already applied by the AutoConfig script:
 
 ```javascript
-javascript:(()=>{const v=document.querySelector(".pdfViewer");if(!v){alert("PDF.js viewer element not found");return}const filter="invert(100%) hue-rotate(180deg)";v.style.filter=v.style.filter===filter?"":filter})()
+javascript:(()=>{const v=document.querySelector(".pdfViewer");if(!v){alert("PDF.js viewer element not found");return}v.dataset.pdfAutoInvertManual="1";const filter="invert(100%) hue-rotate(180deg)";v.style.filter=v.style.filter===filter?"":filter})()
 ```
 
 ## Updating

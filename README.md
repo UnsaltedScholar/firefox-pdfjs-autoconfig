@@ -130,6 +130,8 @@ Detection leaves the document unchanged if rendering fails or takes longer than 
 
 While detection is pending, the PDF pages are hidden, exposing PDF.js's own background color; the toolbar and dialogs remain available. Pages are revealed only after the final filter is applied. The cover is also removed on failure or timeout, and does not apply to printing.
 
+Individual pages also show a black placeholder while they load or render, including later slides and redraws after zooming. Partially rendered canvases remain hidden until PDF.js finishes them. The placeholder compensates for the inversion filter and follows manual bookmarklet toggles; completed pages retain their normal PDF.js background and canvas colors. These loading styles apply only on screen outside forced-colors mode.
+
 To sample a different page, change `SAMPLE_PAGE` at the top of `PDFInvertAuto/PDFInvertAutoChild.sys.mjs` to a positive page number (for example, `1`); documents with fewer pages use their last page. Restart Firefox and clear the startup cache after editing the script.
 
 The rendering uses PDF.js's [page viewport and canvas render APIs](https://mozilla.github.io/pdf.js/examples/). The sample canvas is discarded after the decision; PDF decoding and rendering costs still depend on the document's complexity.

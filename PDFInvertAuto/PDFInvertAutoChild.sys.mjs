@@ -46,7 +46,7 @@ export class PDFInvertAutoChild extends JSWindowActorChild {
     poll = null;
     timeout = null;
     renderTask = null;
-    pendingStyle = null;
+    viewerStyle = null;
     viewer = null;
     originalFilter = "";
 
@@ -64,7 +64,7 @@ export class PDFInvertAutoChild extends JSWindowActorChild {
             Cu.getObjectPrincipal(document).originNoSuffix !== "resource://pdf.js") {
             return false;
         }
-        if (this.pendingStyle) {
+        if (this.viewerStyle) {
             return true;
         }
         if (document.documentElement.dataset.pdfAutoInvert) {
@@ -76,16 +76,34 @@ export class PDFInvertAutoChild extends JSWindowActorChild {
         // their geometry and rendering, while exposing the viewer's actual
         // background instead of guessing a cover color. Keep the toolbar and
         // dialogs visible. Scope to screen so printing is never concealed.
-        this.pendingStyle = document.createElement("style");
-        this.pendingStyle.textContent = `
+        this.viewerStyle = document.createElement("style");
+        this.viewerStyle.textContent = `
             @media screen {
                 :root[data-pdf-auto-invert="pending"] .pdfViewer {
                     opacity: 0 !important;
                     pointer-events: none !important;
                 }
             }
+            @media screen and (forced-colors: none) {
+                .pdfViewer .page:is(:not([data-loaded]), .loadingIcon) {
+                    background-color: #000 !important;
+                }
+                /* White before the viewer filter becomes black on screen.
+                 * Match both CSS forms of our full inversion so manual
+                 * bookmarklet toggles update placeholders automatically. */
+                .pdfViewer:is([style*="invert(100%)"], [style*="invert(1)"])
+                    .page:is(:not([data-loaded]), .loadingIcon) {
+                    background-color: #fff !important;
+                }
+                /* A canvas can be attached while it is still partly painted.
+                 * loadingIcon covers both running and paused page renders;
+                 * PDF.js removes it when rendering finishes. */
+                .pdfViewer .page.loadingIcon .canvasWrapper {
+                    visibility: hidden !important;
+                }
+            }
         `;
-        document.documentElement.appendChild(this.pendingStyle);
+        document.documentElement.appendChild(this.viewerStyle);
         // Also release the concealment if viewer initialization never finishes.
         this.timeout = setTimeout(() => this.finish("unavailable"),
             DETECTION_TIMEOUT_MS);
@@ -192,8 +210,8 @@ export class PDFInvertAutoChild extends JSWindowActorChild {
 
     stop() {
         this.stopped = true;
-        this.pendingStyle?.remove();
-        this.pendingStyle = null;
+        // Keep the stylesheet for pages loaded later while scrolling/zooming.
+        // Its document-wide concealment stops matching once pending is cleared.
         this.viewer = null;
         clearInterval(this.poll);
         clearTimeout(this.timeout);
@@ -205,5 +223,7 @@ export class PDFInvertAutoChild extends JSWindowActorChild {
 
     didDestroy() {
         this.stop();
+        this.viewerStyle?.remove();
+        this.viewerStyle = null;
     }
 }

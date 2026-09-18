@@ -85,15 +85,11 @@ export class PDFInvertAutoChild extends JSWindowActorChild {
                 }
             }
             @media screen and (forced-colors: none) {
+                /* Reveal PDF.js's actual backdrop through unloaded pages.
+                 * Transparency survives the viewer's inversion filter and
+                 * follows light/dark/custom themes without copying colors. */
                 .pdfViewer .page:is(:not([data-loaded]), .loadingIcon) {
-                    background-color: #000 !important;
-                }
-                /* White before the viewer filter becomes black on screen.
-                 * Match both CSS forms of our full inversion so manual
-                 * bookmarklet toggles update placeholders automatically. */
-                .pdfViewer:is([style*="invert(100%)"], [style*="invert(1)"])
-                    .page:is(:not([data-loaded]), .loadingIcon) {
-                    background-color: #fff !important;
+                    background-color: transparent !important;
                 }
                 /* A canvas can be attached while it is still partly painted.
                  * loadingIcon covers both running and paused page renders;

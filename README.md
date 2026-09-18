@@ -2,7 +2,7 @@
 
 Firefox customizations for the built-in PDF viewer:
 
-* **Automatic dark mode** for PDF content, with a configurable text-selection highlight.
+* **Automatic dark mode** for PDF content, with native PDF.js text-selection highlighting.
 * **Vimium C support** inside the built-in PDF viewer, using Vimium C's real mappings, hints, modes, and settings.
 
 The two features are independent and can be used separately.
@@ -118,32 +118,18 @@ Tools → userScripts → Restart and clear startup cache
 
 Open a new PDF to test the scripts.
 
-## Changing the selection highlight
+## Text selection
 
-The PDF dark-mode script draws its own selection overlay so that selected text remains visible after the PDF is inverted.
+Text selection uses Firefox/PDF.js's native highlighting. The dark-mode script only applies the inversion filter to PDF content; it does not draw a custom selection overlay or attach selection, scroll, or resize listeners.
 
-To change its color, edit `PDFInvertAuto/PDFInvertAutoChild.sys.mjs` and find:
-
-```javascript
-background: "rgba(255, 110, 110, 0.62)",
-```
-
-Replace the value with any CSS color. For example:
-
-```javascript
-background: "rgba(100, 160, 255, 0.55)",
-```
-
-The first three values are the red, green, and blue components from `0` to `255`; the final value is opacity from `0` to `1`.
-
-After changing the script, restart Firefox and clear the startup cache.
+If upgrading from the version with the custom overlay, restart Firefox and clear the startup cache as described above. Replace any previously saved dark-mode bookmarklet with the version below as well.
 
 ## Toggling dark mode
 
-This can be accomplished by adding this bookmarklet to your bookmarks bar:
+Add this bookmarklet to your bookmarks bar to toggle the inversion filter, including dark mode already applied by the AutoConfig script:
 
 ```javascript
-javascript:(()=>{const v=document.getElementById("viewer")||document.querySelector(".pdfViewer");if(!v){alert("PDF.js viewer element not found");return}const on=v.dataset.pdfi==="1";if(on){v.dataset.pdfi="0";v.style.filter="";v._pdfiCleanup?.();delete v._pdfiCleanup;return}v.dataset.pdfi="1";v.style.filter="invert(100%) hue-rotate(180deg)";const o=document.createElement("div");o.id="pdfi-selection-overlay";Object.assign(o.style,{position:"fixed",inset:"0",pointerEvents:"none",zIndex:"2147483647",overflow:"hidden"});document.body.appendChild(o);let raf=0;const paint=()=>{cancelAnimationFrame(raf);raf=requestAnimationFrame(()=>{o.replaceChildren();const s=getSelection();if(!s||s.isCollapsed||!s.rangeCount)return;const n=s.anchorNode;if(!n||!v.contains(n.nodeType===1?n:n.parentElement))return;for(let i=0;i<s.rangeCount;i++)for(const r of s.getRangeAt(i).getClientRects()){if(r.width<1||r.height<1)continue;const d=document.createElement("div");Object.assign(d.style,{position:"fixed",left:r.left+"px",top:r.top+"px",width:r.width+"px",height:r.height+"px",background:"rgba(255,110,110,.62)",borderRadius:"2px"});o.appendChild(d)}})};document.addEventListener("selectionchange",paint);window.addEventListener("scroll",paint,true);window.addEventListener("resize",paint);paint();v._pdfiCleanup=()=>{cancelAnimationFrame(raf);document.removeEventListener("selectionchange",paint);window.removeEventListener("scroll",paint,true);window.removeEventListener("resize",paint);o.remove()}})()
+javascript:(()=>{const v=document.querySelector(".pdfViewer");if(!v){alert("PDF.js viewer element not found");return}const filter="invert(100%) hue-rotate(180deg)";v.style.filter=v.style.filter===filter?"":filter})()
 ```
 
 ## Updating

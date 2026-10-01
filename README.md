@@ -126,7 +126,7 @@ The sample is at most 128 by 128 pixels. A document is treated as already dark w
 
 This is a heuristic: full-page photographs, unusual borders, and documents mixing light and dark pages can be misclassified. The decision applies to the whole document, once per load. Use the bookmarklet below to override it.
 
-Detection leaves the document unchanged if rendering fails or takes longer than 15 seconds; it also preserves a manual filter change made while sampling is in progress.
+Detection leaves the document unchanged if rendering fails or takes longer than 15 seconds; it also preserves a manual toggle made while sampling is in progress.
 
 While detection is pending, the PDF pages are hidden, exposing PDF.js's own background color; the toolbar and dialogs remain available. Pages are revealed only after the final filter is applied. The cover is also removed on failure or timeout, and does not apply to printing.
 
@@ -140,6 +140,8 @@ The rendering uses PDF.js's [page viewport and canvas render APIs](https://mozil
 
 Text selection uses Firefox/PDF.js's native highlighting. The dark-mode script only applies the inversion filter to PDF content; it does not draw a custom selection overlay or attach selection, scroll, or resize listeners.
 
+Inversion is applied to each PDF `.page` through the viewer's `pdf-auto-invert` class, including pages created later. The `#viewer` container remains unfiltered to avoid Firefox 159's pinch-zoom scroll jump.
+
 If upgrading from the version with the custom overlay, restart Firefox and clear the startup cache as described above. Replace any previously saved dark-mode bookmarklet with the version below as well.
 
 ## Toggling dark mode
@@ -147,8 +149,10 @@ If upgrading from the version with the custom overlay, restart Firefox and clear
 Add this bookmarklet to your bookmarks bar to toggle the inversion filter, including dark mode already applied by the AutoConfig script:
 
 ```javascript
-javascript:(()=>{const v=document.querySelector(".pdfViewer");if(!v){alert("PDF.js viewer element not found");return}v.dataset.pdfAutoInvertManual="1";const filter="invert(100%) hue-rotate(180deg)";v.style.filter=v.style.filter===filter?"":filter})()
+javascript:(()=>{const v=document.querySelector(".pdfViewer");if(!v){alert("PDF.js viewer element not found");return}if(!document.getElementById("pdf-auto-invert-style")){const s=document.createElement("style");s.id="pdf-auto-invert-style";s.textContent=".pdfViewer.pdf-auto-invert .page{filter:invert(100%) hue-rotate(180deg)}";document.documentElement.appendChild(s)}v.dataset.pdfAutoInvertManual="1";v.classList.toggle("pdf-auto-invert")})()
 ```
+
+When upgrading from container-level inversion, replace your saved bookmarklet with this version, clear the startup cache, and restart Firefox before reopening PDFs. The old bookmarklet still filters `#viewer` and must not be used with the page filter.
 
 ## Updating
 

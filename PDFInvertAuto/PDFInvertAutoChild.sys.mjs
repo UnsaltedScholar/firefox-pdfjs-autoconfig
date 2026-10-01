@@ -48,7 +48,7 @@ export class PDFInvertAutoChild extends JSWindowActorChild {
     renderTask = null;
     viewerStyle = null;
     viewer = null;
-    originalFilter = "";
+    originalInverted = false;
 
     handleEvent(event) {
         if (event.type === "DOMDocElementInserted") {
@@ -77,7 +77,13 @@ export class PDFInvertAutoChild extends JSWindowActorChild {
         // background instead of guessing a cover color. Keep the toolbar and
         // dialogs visible. Scope to screen so printing is never concealed.
         this.viewerStyle = document.createElement("style");
+        this.viewerStyle.id = "pdf-auto-invert-style";
         this.viewerStyle.textContent = `
+            /* Filtering the viewer breaks pinch-zoom scroll anchoring in
+             * Firefox 159. Filter each page, including pages added later. */
+            .pdfViewer.pdf-auto-invert .page {
+                filter: ${INVERT_FILTER};
+            }
             @media screen {
                 :root[data-pdf-auto-invert="pending"] .pdfViewer {
                     opacity: 0 !important;
@@ -86,7 +92,7 @@ export class PDFInvertAutoChild extends JSWindowActorChild {
             }
             @media screen and (forced-colors: none) {
                 /* Reveal PDF.js's actual backdrop through unloaded pages.
-                 * Transparency survives the viewer's inversion filter and
+                 * Transparency survives the page's inversion filter and
                  * follows light/dark/custom themes without copying colors. */
                 .pdfViewer .page:is(:not([data-loaded]), .loadingIcon) {
                     background-color: transparent !important;
@@ -117,7 +123,7 @@ export class PDFInvertAutoChild extends JSWindowActorChild {
             this.finish("unavailable");
             return;
         }
-        this.originalFilter = this.viewer.style.filter;
+        this.originalInverted = this.viewer.classList.contains("pdf-auto-invert");
         const window = this.contentWindow;
 
         // Check immediately, then briefly poll until PDF.js exposes the loaded
@@ -155,10 +161,11 @@ export class PDFInvertAutoChild extends JSWindowActorChild {
             // Apply the final filter before revealing the pages, in one task.
             // Preserve manual toggles made while detection was in progress.
             if (this.viewer?.dataset.pdfAutoInvertManual === "1" ||
-                (this.viewer && this.viewer.style.filter !== this.originalFilter)) {
+                (this.viewer && this.viewer.classList.contains("pdf-auto-invert") !==
+                    this.originalInverted)) {
                 decision = "manual";
             } else if (decision === "inverted" && this.viewer) {
-                this.viewer.style.filter = INVERT_FILTER;
+                this.viewer.classList.add("pdf-auto-invert");
             }
             this.document.documentElement.dataset.pdfAutoInvert = decision;
         } finally {

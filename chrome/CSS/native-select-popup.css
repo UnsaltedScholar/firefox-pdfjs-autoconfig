@@ -1,0 +1,9 @@
+/* Native HTML dropdowns paint their rounded surface in ::part(content).
+ * Keep the outer popup transparent so custom themes cannot fill the space
+ * outside that surface (including its shadow margin) with a black rectangle.
+ * Leave the panel colors, border, radius, and shadow to the existing theme. */
+@-moz-document url("chrome://browser/content/browser.xhtml") {
+  #ContentSelectDropdown > menupopup {
+    background-color: transparent !important;
+  }
+}

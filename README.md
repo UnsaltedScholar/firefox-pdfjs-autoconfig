@@ -156,6 +156,26 @@ When upgrading from container-level inversion, replace your saved bookmarklet wi
 
 ## Updating
 
+### Optional fix for square backgrounds around native dropdowns
+
+If a custom userChrome theme paints a square background outside the rounded
+outline of HTML dropdowns (including PDF.js's zoom menu), copy
+`chrome/CSS/native-select-popup.css` from this repository to your profile's
+`chrome/CSS/` directory. Add this import **after any theme imports**, before
+ordinary CSS rules, in your existing `chrome/userChrome.css`:
+
+```css
+@import url("CSS/native-select-popup.css");
+```
+
+This optional stylesheet requires
+`toolkit.legacyUserProfileCustomizations.stylesheets = true`. It keeps the outer
+popup transparent while retaining the theme's rounded inner surface, colors,
+border, and shadow. It does not change PDF inversion. Restart Firefox to apply it.
+Keep your existing userChrome rules; do not replace the file.
+
+### Scripts
+
 If this repository was cloned directly into `chrome/JS`:
 
 ```bash
